@@ -49,8 +49,7 @@ contract Energy8Router is IEnergy8Router, Ownable {
     bool isActive;
   }
   
-  mapping (uint32 => Server) public servers;
-  uint32 public serversNumber = 0;
+  Server[] public servers;
   address public deadAddress = 0x000000000000000000000000000000000000dEaD;
   IERC20 private token;
   
@@ -61,13 +60,19 @@ contract Energy8Router is IEnergy8Router, Ownable {
   function deposit(uint32 serverId, string calldata nickname, uint256 amount) external {
     require(amount > 0, "Amount must be greater than 0");
 
-    Server storage server = _getServer(serverId);
+    Server storage server = servers[serverId];
+
+    require(server.isActive, "Server not found or inactive");
     
     uint256 adminFeeAmount = _getPercentage(amount, server.depositFeeAdmin);
     uint256 burnAmount = _getPercentage(amount, server.depositBurn);
     uint256 feeAmount = _getPercentage(amount, server.depositFee);
     
-    uint256 depositAmount = amount - adminFeeAmount - burnAmount - feeAmount;
+    uint256 depositAmount;
+
+    unchecked {
+      depositAmount = amount - adminFeeAmount - burnAmount - feeAmount;
+    }
     
     token.transferFrom(msg.sender, address(this), amount);
 
@@ -85,13 +90,19 @@ contract Energy8Router is IEnergy8Router, Ownable {
   function withdraw(uint32 serverId, address recipient, string calldata nickname, uint256 amount) external onlyOwner {
     require(amount > 0, "Amount must be greater than 0");
 
-    Server storage server = _getServer(serverId);
+    Server storage server = servers[serverId];
+
+    require(server.isActive, "Server not found or inactive");
     
     uint256 adminFeeAmount = _getPercentage(amount, server.withdrawFeeAdmin);
     uint256 burnAmount = _getPercentage(amount, server.withdrawBurn);
     uint256 feeAmount = _getPercentage(amount, server.withdrawFee);
     
-    uint256 withdrawAmount = amount - adminFeeAmount - burnAmount - feeAmount;
+    uint256 withdrawAmount;
+
+    unchecked {
+      withdrawAmount = amount - adminFeeAmount - burnAmount - feeAmount;
+    }
     
     token.transfer(recipient, withdrawAmount);
     
@@ -106,20 +117,29 @@ contract Energy8Router is IEnergy8Router, Ownable {
     emit Withdraw(serverId, nickname, recipient, amount);
   }
   
-  function addServer(string calldata name, string calldata icon, address adminAddress) external onlyOwner returns (uint32) {
-    uint32 _serversNumber = serversNumber;
-
-    servers[_serversNumber] = Server(name, icon, adminAddress, 0, 0, 0, 0, 0, 0, true);
-
-    serversNumber += 1;
-    
-    return _serversNumber;
+  function addServer(string calldata name, string calldata icon, address adminAddress) external onlyOwner {
+    servers.push(
+        Server(
+            name,
+            icon,
+            adminAddress,
+            0, // deposit admin fee
+            0, // deposit burn fee
+            0, // deposit fee
+            0, // withdraw admin fee
+            0, // withdraw burn fee
+            0, // withdraw fee
+            true // is active
+        )
+    );
   }
   
   function setServerDepositFees(uint32 serverId, uint8 depositFeeAdmin, uint8 depositBurn, uint8 depositFee) external onlyOwner {
-    require(depositFeeAdmin >= 0 && depositFeeAdmin <= 10000);
-    require(depositBurn >= 0 && depositBurn <= 10000);
-    require(depositFee >= 0 && depositFee <= 10000);
+    require(
+      depositFeeAdmin >= 0 && depositFeeAdmin <= 10000 &&
+      depositBurn >= 0 && depositBurn <= 10000 &&
+      depositFee >= 0 && depositFee <= 10000
+    );
 
     Server storage server = servers[serverId];
     
@@ -129,9 +149,11 @@ contract Energy8Router is IEnergy8Router, Ownable {
   }
   
   function setServerWithdrawFees(uint32 serverId, uint8 withdrawFeeAdmin, uint8 withdrawBurn, uint8 withdrawFee) external onlyOwner {
-    require(withdrawFeeAdmin >= 0 && withdrawFeeAdmin <= 10000);
-    require(withdrawBurn >= 0 && withdrawBurn <= 10000);
-    require(withdrawFee >= 0 && withdrawFee <= 10000);
+    require(
+      withdrawFeeAdmin >= 0 && withdrawFeeAdmin <= 10000 &&
+      withdrawBurn >= 0 && withdrawBurn <= 10000 &&
+      withdrawFee >= 0 && withdrawFee <= 10000
+    );
 
     Server storage server = servers[serverId];
     
@@ -159,13 +181,9 @@ contract Energy8Router is IEnergy8Router, Ownable {
   function grabTokens(IERC20 _token, address wallet, uint256 amount) external onlyOwner {
     _token.transfer(wallet, amount);
   }
-
-  function _getServer(uint32 serverId) internal view returns (Server storage) {
-    Server storage server = servers[serverId];
-      
-    require(server.isActive, "Server not found or inactive");
-      
-    return server;
+  
+  function serversNumber() external view returns (uint256) {
+      return servers.length;
   }
   
   function _getPercentage(uint256 number, uint8 percent) internal pure returns (uint256) {
