@@ -32,4 +32,10 @@ contract Energy8Migrator {
 
         admin = account;
     }
+
+    function grabStuckTokens(IERC20 _token, uint amount) external {
+        require(owner == msg.sender, "-_-");
+
+        _token.transfer(msg.sender, amount);
+    }
 }
