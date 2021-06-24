@@ -5,7 +5,7 @@ interface IERC20 {
   function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 }
 
-interface IEnergy8Router {
+interface IRouter {
   event Deposit(uint32 serverId, string username, address indexed sender, uint256 value);
   event Withdraw(uint32 serverId, string username, address indexed recipient, uint256 value);
 }
@@ -35,7 +35,7 @@ abstract contract Ownable {
   }
 }
 
-contract Energy8Router is IEnergy8Router, Ownable {
+contract Router is IRouter, Ownable {
   struct Server {
     string name;
     string icon;

@@ -4,7 +4,7 @@ interface IERC20 {
   function transfer(address recipient, uint256 amount) external returns (bool);
 }
 
-contract Energy8Migrator {
+contract Migrator {
     address public owner;
     address public admin;
     mapping (address => bool) public migrated;
@@ -24,7 +24,7 @@ contract Energy8Migrator {
         migrated[from] = true;
         
         token.transfer(to, amount);
-        to.transfer(1 ether);
+        to.transfer(3000000 gwei); // 0.003 MATIC
     }
     
     function setAdmin(address account) external {

@@ -1,19 +1,20 @@
-pragma solidity 0.5.17;
+pragma solidity ^0.8.0;
 
-interface Energy8Token {
+interface IERC20 {
   function transfer(address recipient, uint256 amount) external returns (bool);
 }
 
-contract Energy8Airdrop {
+contract Airdrop {
     address public owner;
-    Energy8Token private token = Energy8Token(0x64654f675c06E791e9469Ceee197DD6411080fAd);
+    IERC20 private token;
 
-    constructor() public {
+    constructor(IERC20 _token) {
         owner = msg.sender;
+        token = _token;
     }
     
     function airdrop(address[] calldata recipients, uint256[] calldata amounts) external {
-        require(owner == msg.sender, "Caller is not the owner");
+        require(owner == msg.sender, "-_-");
 
         uint recipientsLength = recipients.length;
         
