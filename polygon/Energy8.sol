@@ -1,4 +1,4 @@
-pragma solidity ^0.8.0;
+pragma solidity >=0.6.0 <0.8.0;
 
 interface IERC20 {
   function name() external view returns (string memory);
@@ -16,14 +16,24 @@ interface IERC20 {
   event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-abstract contract Ownable {
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address payable) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes memory) {
+        return msg.data;
+    }
+}
+
+abstract contract Ownable is Context {
   address private _owner;
 
   event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
   constructor () {
-    _owner = msg.sender;
-    emit OwnershipTransferred(address(0), msg.sender);
+    _owner = _msgSender();
+    emit OwnershipTransferred(address(0), _msgSender());
   }
 
   function owner() public view returns (address) {
@@ -31,7 +41,7 @@ abstract contract Ownable {
   }
 
   modifier onlyOwner() {
-    require(_owner == msg.sender, "-_-");
+    require(_owner == _msgSender(), "-_-");
     _;
   }
 
@@ -39,6 +49,57 @@ abstract contract Ownable {
     emit OwnershipTransferred(_owner, newOwner);
     _owner = newOwner;
   }
+}
+
+library SafeMath {
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, "SafeMath: addition overflow");
+
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return sub(a, b, "SafeMath: subtraction overflow");
+    }
+
+    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        uint256 c = a - b;
+
+        return c;
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+
+    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+
+        return c;
+    }
+
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return mod(a, b, "SafeMath: modulo by zero");
+    }
+
+    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b != 0, errorMessage);
+        return a % b;
+    }
 }
 
 interface IFactory {
@@ -66,21 +127,24 @@ interface IRouter {
     ) external;
 }
 
-contract Energy8 is IERC20, Ownable {
+contract Energy8 is Context, Ownable, IERC20 {
+  using SafeMath for uint256;
   mapping (address => mapping (address => uint256)) private _allowances;
   mapping (address => uint256) private _balances;
   mapping (address => uint256) private _startPeriodBalances;
   mapping (address => uint256) private _spentDuringPeriod;
   mapping (address => uint256) private _periodStartTime;
   mapping (address => bool) private _whitelist;
+  mapping (address => bool) private _feeWhitelist;
   mapping (address => bool) private _blacklist;
+  mapping (address => string) private _blacklistReasons;
   mapping (address => bool) private _sellers;
   mapping (address => bool) public admins;
 
   string private _name = "Energy 8";
   string private _symbol = "E8";
   
-  uint256 private _totalSupply = 100000000000000 * 10**9; // 200 000 000 000 000
+  uint256 private _totalSupply = 100000000000000 * 10**9; // 100 000 000 000 000
   uint256 public periodDuration = 1 days;
   uint256 public minTokensForLiquidityGeneration = _totalSupply / 1000000; // 0.001% of total supply
   
@@ -92,13 +156,15 @@ contract Energy8 is IERC20, Ownable {
     1 - 0.01%
   */
   // transfer fees
-  uint16 fee = 0;
-  uint16 buyFee = 0;
-  uint16 sellFee = 0;
-  uint16 liquidityFee = 0;
-  uint16 sellLiquidityFee = 0;
-  uint16 buyLiquidityFee = 0;
-  uint16 adminFee = 0;
+  uint16 public fee = 0; // transfer fee 0%
+  uint16 public buyFee = 0;  // buy fee 0%
+  uint16 public sellFee = 0; // sell fee 0%
+  uint16 public liquidityFee = 500; // transfer liquidity fee 5%
+  uint16 public sellLiquidityFee = 500; // sell liquidity fee 5%
+  uint16 public buyLiquidityFee = 200; // buy liquidity fee 2%
+  uint16 public marketingFee = 100; // marketing fee 1%
+  
+  address public marketingWallet;
   
   uint16 public maxTransferPercent = 3000; // 30%
   uint16 public maxHodlPercent = 100; // 1%
@@ -109,14 +175,12 @@ contract Energy8 is IERC20, Ownable {
   address public pair;
   address private mainTokenInPair;
   
-  bool generateLiquidityEnabled = true;
-  
   modifier onlyAdmin() {
-    require(admins[msg.sender], "Who are you?");
+    require(admins[_msgSender()], "Who are you?");
     _;
   }
   
-  bool isLocked;
+  bool private isLocked;
 
   modifier lock {
     isLocked = true;
@@ -125,24 +189,28 @@ contract Energy8 is IERC20, Ownable {
   }
 
   constructor(IRouter _router) {
-    _balances[msg.sender] = _totalSupply;
-
-    _approve(address(this), address(_router), _totalSupply);
+    _balances[_msgSender()] = _totalSupply;
     
     mainTokenInPair = _router.WETH();
     
     pair = IFactory(_router.factory()).createPair(address(this), mainTokenInPair);
     
     // add owner and this contract to the whitelist for disable transfer limitations and fees
-    _whitelist[msg.sender] = true;
+    _whitelist[_msgSender()] = true;
     _whitelist[address(this)] = true;
+    _feeWhitelist[_msgSender()] = true;
+    _feeWhitelist[address(this)] = true;
 
     _sellers[pair] = true;
     _sellers[address(_router)] = true;
-
-    admins[msg.sender] = true;
     
-    emit Transfer(address(0), msg.sender, _totalSupply);
+    router = _router;
+    
+    marketingWallet = _msgSender();
+
+    admins[_msgSender()] = true;
+    
+    emit Transfer(address(0), _msgSender(), _totalSupply);
   }
 
   function getOwner() external view returns (address) {
@@ -170,7 +238,7 @@ contract Energy8 is IERC20, Ownable {
   }
 
   function transfer(address recipient, uint256 amount) external override returns (bool) {
-    _transfer(msg.sender, recipient, amount);
+    _transfer(_msgSender(), recipient, amount);
     return true;
   }
 
@@ -179,18 +247,13 @@ contract Energy8 is IERC20, Ownable {
   }
 
   function approve(address spender, uint256 amount) external override returns (bool) {
-    _approve(msg.sender, spender, amount);
+    _approve(_msgSender(), spender, amount);
     return true;
   }
 
-  function transferFrom(address sender, address recipient, uint256 amount) external override returns (bool) {
-    uint256 currentAllowance = _allowances[sender][msg.sender];
-    require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
+  function transferFrom (address sender, address recipient, uint256 amount) public override returns (bool) {
     _transfer(sender, recipient, amount);
-    unchecked {
-        _approve(sender, msg.sender, currentAllowance - amount);
-    }
-
+    _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, 'BEP20: transfer amount exceeds allowance'));
     return true;
   }
   
@@ -208,111 +271,110 @@ contract Energy8 is IERC20, Ownable {
     require(sender != address(0), "ERC20: transfer from the zero address");
     require(recipient != address(0), "ERC20: transfer to the zero address");
     require(sender != recipient, "The sender cannot be the recipient");
-    require(amount > 0, "Transfer amount must be greater than zero");
+    require(amount != 0, "Transfer amount must be greater than zero");
     
-    uint256 feeInTokens;
+    uint256 amountWithFee = amount;
+
     uint256 liquidityFeeInTokens;
+    uint256 marketingFeeInTokens;
 
     // buy tokens
     if (_sellers[sender]) {
-      if (!_whitelist[recipient]) {
-        feeInTokens = _getPercentage(amount, buyFee);
+      if (!_feeWhitelist[recipient]) {
         liquidityFeeInTokens = _getPercentage(amount, buyLiquidityFee);
-
-        unchecked {
-            _checkHodlPercent(recipient, amount - feeInTokens - liquidityFeeInTokens, "You cannot hold more tokens. You are already a whale!");
-        }
+        marketingFeeInTokens = _getPercentage(amount, marketingFee);
+        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(_getPercentage(amount, buyFee)).sub(liquidityFeeInTokens);
+      }
+      
+      if (!_whitelist[recipient]) {
+        _checkHodlPercent(recipient, amountWithFee, "You cannot hold more tokens. You are already a whale!");
       }
     // sell tokens
     } else if (_sellers[recipient]) {
-      require(!_blacklist[sender], "You are blacklisted and cannot sell tokens :(");
+      require(!_blacklist[sender], _blacklistReasons[sender]);
 
-      if (!_whitelist[sender]) {
-        feeInTokens = _getPercentage(amount, sellFee);
+      if (!_feeWhitelist[sender]) {
         liquidityFeeInTokens = _getPercentage(amount, sellLiquidityFee);
-
-        unchecked {
-            _checkAndUpdatePeriod(sender, amount - feeInTokens - liquidityFeeInTokens, "You can no longer sell tokens for the current period. Just relax and wait");
-        }
+        marketingFeeInTokens = _getPercentage(amount, marketingFee);
+        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(_getPercentage(amount, sellFee)).sub(liquidityFeeInTokens);
+      }
+      
+      if (!_whitelist[sender]) {
+        _checkAndUpdatePeriod(sender, amount, "You can no longer sell tokens for the current period. Just relax and wait");
       }
     // transfer tokens between addresses
     } else {
-      require(!_blacklist[sender] && !_blacklist[msg.sender], "You are blacklisted and cannot transfer tokens :(");
+      require(!_blacklist[sender] && !_blacklist[_msgSender()], _blacklistReasons[sender]);
 
-      if (!_whitelist[sender] || !_whitelist[msg.sender]) {
-        feeInTokens = _getPercentage(amount, fee);
+      if (!_feeWhitelist[sender] || !_feeWhitelist[_msgSender()]) {
         liquidityFeeInTokens = _getPercentage(amount, liquidityFee);
-
-        unchecked {
-            uint256 transferAmount = amount - feeInTokens - liquidityFeeInTokens;
-
-            _checkHodlPercent(recipient, transferAmount, "Recipient cannot hold more tokens. He's already a whale!");
-            _checkAndUpdatePeriod(sender, transferAmount, "You can no longer transfer tokens for the current period. Just relax and wait");
-        }
+        marketingFeeInTokens = _getPercentage(amount, marketingFee);
+        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(_getPercentage(amount, fee)).sub(liquidityFeeInTokens);
+      }
+      
+      if (!_whitelist[sender] || !_whitelist[_msgSender()]) {
+        _checkHodlPercent(recipient, amountWithFee, "Recipient cannot hold more tokens. He's already a whale!");
+        _checkAndUpdatePeriod(sender, amount, "You can no longer transfer tokens for the current period. Just relax and wait");
       }
     }
     
-    uint256 adminFeeInTokens = _getPercentage(amount, adminFee);
-
+    if (marketingFeeInTokens > 0) {
+        _balances[marketingWallet] = _balances[marketingWallet].add(marketingFeeInTokens);
+        emit Transfer(sender, marketingWallet, marketingFeeInTokens);
+    }
+    
     uint256 contractTokenBalance = _balances[address(this)];
 
-    unchecked {
-        amount -= feeInTokens - liquidityFeeInTokens - adminFeeInTokens;
-    }
-    
-    if (adminFeeInTokens > 0) {
-        _balances[owner()] += adminFeeInTokens;
-    }
-    
-    uint256 senderBalance = _balances[sender];
-    require(senderBalance >= amount, "ERC20: transfer amount exceeds balance");
-    unchecked {
-        _balances[sender] = senderBalance - amount;
-    }
-    _balances[recipient] += amount;
-    
-    if (generateLiquidityEnabled && !isLocked && liquidityFeeInTokens > 0 && !_sellers[sender]) {
-        contractTokenBalance += liquidityFeeInTokens;
+    if (liquidityFeeInTokens > 0) {
+        contractTokenBalance = contractTokenBalance.add(liquidityFeeInTokens);
         _balances[address(this)] = contractTokenBalance;
-
-        if (contractTokenBalance >= minTokensForLiquidityGeneration) {
-            generateLiquidity(contractTokenBalance);
-        }
+        emit Transfer(sender, address(this), liquidityFeeInTokens);
     }
 
-    emit Transfer(sender, recipient, amount);
+    if (!isLocked && sender != pair && contractTokenBalance >= minTokensForLiquidityGeneration) {
+        generateLiquidity(contractTokenBalance);
+    }
+    
+    _balances[sender] = _balances[sender].sub(amount, 'ERC20: transfer amount exceeds balance');
+    _balances[recipient] = _balances[recipient].add(amountWithFee);
+
+    emit Transfer(sender, recipient, amountWithFee);
+  }
+  
+  function generateLiquidity() external {
+      generateLiquidity(_balances[address(this)]);
   }
   
   function generateLiquidity(uint256 amount) internal lock {
-    unchecked {
-        uint256 tokensForSell = amount / 2;
-        uint256 tokensForLiquidity = amount - tokensForSell;
+    uint256 tokensForSell = amount.div(2);
+    uint256 tokensForLiquidity = amount.sub(tokensForSell);
+
+    uint256 initialBalance = address(this).balance;
+
+    address[] memory path = new address[](2);
+    path[0] = address(this);
+    path[1] = mainTokenInPair;
     
-        uint256 initialBalance = address(this).balance;
-    
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = mainTokenInPair;
-    
-        router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokensForSell,
-            0, // accept any amount
-            path,
-            address(this),
-            block.timestamp
-        );
-        
-        uint256 balance = address(this).balance - initialBalance;
-        
-        router.addLiquidityETH{value: balance}(
-            address(this),
-            tokensForLiquidity,
-            0, // slippage is unavoidable
-            0, // slippage is unavoidable
-            0x000000000000000000000000000000000000dEaD,
-            block.timestamp
-        );
-    }
+    _approve(address(this), address(router), amount);
+
+    router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+        tokensForSell,
+        0, // accept any amount
+        path,
+        address(this),
+        block.timestamp
+    );
+
+    uint256 balance = address(this).balance.sub(initialBalance);
+
+    router.addLiquidityETH{value: balance}(
+        address(this),
+        tokensForLiquidity,
+        0, // slippage is unavoidable
+        0, // slippage is unavoidable
+        0x000000000000000000000000000000000000dEaD,
+        block.timestamp
+    );
   }
   
   function _checkAndUpdatePeriod(address account, uint256 amount, string memory errorMessage) internal {
@@ -324,16 +386,12 @@ contract Energy8 is IERC20, Ownable {
         _spentDuringPeriod[account] = 0;
     }
 
-    uint256 newSoldDuringPeriod = _spentDuringPeriod[account] + amount;
-    uint256 oneCanSolOrTransfer = _getPercentage(_startPeriodBalances[account], maxTransferPercent);
+    uint256 newSpentDuringPeriod = _spentDuringPeriod[account] + amount;
+    uint256 accountCanSpent = _getPercentage(_startPeriodBalances[account], maxTransferPercent);
     
-    require(newSoldDuringPeriod <= oneCanSolOrTransfer, errorMessage);
+    require(newSpentDuringPeriod <= accountCanSpent, errorMessage);
     
-    _spentDuringPeriod[account] = newSoldDuringPeriod;
-  }
-  
-  function _getPercentage(uint256 number, uint16 percent) internal pure returns (uint256) {
-    return (number * percent) / 10000;
+    _spentDuringPeriod[account] = newSpentDuringPeriod;
   }
   
   function _checkHodlPercent(address account, uint256 amount, string memory erorrMessage) internal view {
@@ -350,8 +408,13 @@ contract Energy8 is IERC20, Ownable {
     _whitelist[account] = value;
   }
   
-  function setBlacklist(address account, bool value) external onlyAdmin {
+  function setFeeWhitelist(address account, bool value) external onlyAdmin {
+    _feeWhitelist[account] = value;
+  }
+  
+  function setBlacklist(address account, bool value, string memory reason) external onlyAdmin {
     _blacklist[account] = value;
+    _blacklistReasons[account] = reason;
   }
   
   function setAdmin(address account, bool value) external onlyOwner {
@@ -379,6 +442,10 @@ contract Energy8 is IERC20, Ownable {
   
   function isWhitelisted(address account) external view returns (bool) {
       return _whitelist[account];
+  }
+  
+  function isExcludedFromFee(address account) external view returns (bool) {
+      return _feeWhitelist[account];
   }
   
   function isBlacklisted(address account) external view returns (bool) {
@@ -429,22 +496,20 @@ contract Energy8 is IERC20, Ownable {
     sellLiquidityFee = _sellLiquidityFee;
   }
   
-  function setAdminFee(uint16 _adminFee) external onlyOwner {
-    require(_adminFee <= 500); // 0% - 5%
-    adminFee = _adminFee;
+  function setMarketingFee(uint16 _marketingFee) external onlyOwner {
+    require(_marketingFee <= 250); // 0% - 2.5%
+    marketingFee = _marketingFee;
   }
   
-  function enableLiquidityGeneration(uint16 _liquidityFee, uint16 _buyLiquidityFee, uint16 _sellLiquidityFee) external onlyOwner {
-      generateLiquidityEnabled = false;
-      setLiquidityFees(_liquidityFee, _buyLiquidityFee, _sellLiquidityFee);
+  function setMarketingWallet(address _marketingWallet) external onlyOwner {
+      marketingWallet = _marketingWallet;
   }
   
   function disableLiquidityGeneration() external onlyOwner {
-      generateLiquidityEnabled = false;
       setLiquidityFees(0, 0, 0);
   }
   
-  function _getPercentage(uint256 number, uint8 percent) internal pure returns (uint256) {
+  function _getPercentage(uint256 number, uint16 percent) internal pure returns (uint256) {
     return (number * percent) / 10000;
   }
 }
