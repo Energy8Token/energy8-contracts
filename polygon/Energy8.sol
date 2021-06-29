@@ -141,7 +141,7 @@ contract Energy8 is Context, Ownable, IERC20 {
   mapping (address => bool) private _sellers;
   mapping (address => bool) public admins;
 
-  string private _name = "Energy 8";
+  string private _name = "Energy8";
   string private _symbol = "E8";
 
   uint8 private _decimals = 9;
@@ -274,8 +274,9 @@ contract Energy8 is Context, Ownable, IERC20 {
   function _transfer(address sender, address recipient, uint256 amount) internal {
     require(sender != address(0), "ERC20: transfer from the zero address");
     require(recipient != address(0), "ERC20: transfer to the zero address");
-    require(sender != recipient, "The sender cannot be the recipient");
-    require(amount != 0, "Transfer amount must be greater than zero");
+    require(sender != recipient, "ERC20: The sender cannot be the recipient");
+    require(amount != 0, "ERC20: Transfer amount must be greater than zero");
+    require(_balances[sender] >= amount, "ERC20: transfer amount exceeds balance");
     
     uint256 amountWithFee = amount;
 
@@ -293,7 +294,7 @@ contract Energy8 is Context, Ownable, IERC20 {
       }
       
       if (!_whitelist[recipient]) {
-        _checkHodlPercent(recipient, amountWithFee, "You cannot hold more tokens. You are already a whale!");
+        _checkHodlPercent(recipient, amountWithFee, "You cannot hold this amount of tokens. Looks like you are already a whale!");
       }
     // sell tokens
     } else if (_sellers[recipient]) {
@@ -307,22 +308,25 @@ contract Energy8 is Context, Ownable, IERC20 {
       }
       
       if (!_whitelist[sender]) {
-        _checkAndUpdatePeriod(sender, amount, "You can no longer sell tokens for the current period. Just relax and wait");
+        _checkAndUpdatePeriod(sender, amount, "You can not sell this amount of tokens for the current period. Just relax and wait");
       }
     // transfer tokens between addresses
     } else {
       require(!_blacklist[sender] && !_blacklist[_msgSender()], _blacklistReasons[sender]);
 
-      if (!_feeWhitelist[sender] || !_feeWhitelist[_msgSender()]) {
+      if (!_feeWhitelist[sender] && !_feeWhitelist[_msgSender()]) {
         liquidityFeeInTokens = _getPercentage(amount, liquidityFee);
         marketingFeeInTokens = _getPercentage(amount, marketingFee);
         feeInTokens = _getPercentage(amount, fee);
         amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(feeInTokens).sub(liquidityFeeInTokens);
       }
       
-      if (!_whitelist[sender] || !_whitelist[_msgSender()]) {
-        _checkHodlPercent(recipient, amountWithFee, "Recipient cannot hold more tokens. He's already a whale!");
-        _checkAndUpdatePeriod(sender, amount, "You can no longer transfer tokens for the current period. Just relax and wait");
+      if (!_whitelist[recipient] && !_whitelist[_msgSender()]) {
+        _checkHodlPercent(recipient, amountWithFee, "Recipient cannot hold this amount of tokens. Looks like he's already a whale!");
+      }
+      
+      if (!_whitelist[sender] && !_whitelist[_msgSender()]) {
+        _checkAndUpdatePeriod(sender, amount, "You can not transfer this amount of tokens for the current period. Just relax and wait");
       }
     }
     
@@ -351,7 +355,7 @@ contract Energy8 is Context, Ownable, IERC20 {
         }
     }
     
-    _balances[sender] = _balances[sender].sub(amount, 'ERC20: transfer amount exceeds balance');
+    _balances[sender] = _balances[sender].sub(amount);
     _balances[recipient] = _balances[recipient].add(amountWithFee);
 
     emit Transfer(sender, recipient, amountWithFee);
