@@ -143,8 +143,9 @@ contract Energy8 is Context, Ownable, IERC20 {
 
   string private _name = "Energy 8";
   string private _symbol = "E8";
-  
-  uint256 private _totalSupply = 100000000000000 * 10**9; // 100 000 000 000 000
+
+  uint8 private _decimals = 9;
+  uint256 private _totalSupply = 100000000000000 * 10**_decimals; // 100 000 000 000 000
   uint256 public periodDuration = 1 days;
   uint256 public minTokensForLiquidityGeneration = _totalSupply / 1000000; // 0.001% of total supply
   
@@ -155,7 +156,7 @@ contract Energy8 is Context, Ownable, IERC20 {
     10 - 0.1%
     1 - 0.01%
   */
-  // transfer fees
+  // fees
   uint16 public fee = 0; // transfer fee 0%
   uint16 public buyFee = 0;  // buy fee 0%
   uint16 public sellFee = 0; // sell fee 0%
@@ -169,12 +170,13 @@ contract Energy8 is Context, Ownable, IERC20 {
   
   uint16 public maxTransferPercent = 3000; // 30%
   uint16 public maxHodlPercent = 100; // 1%
-  uint8 private _decimals = 9;
   
   // AMM addresses
   IRouter public router;
   address public pair;
   address private mainTokenInPair;
+  
+  address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
   
   modifier onlyAdmin() {
     require(admins[_msgSender()], "Who are you?");
@@ -208,6 +210,7 @@ contract Energy8 is Context, Ownable, IERC20 {
     router = _router;
     
     marketingWallet = _msgSender();
+    feeWallet = DEAD;
 
     admins[_msgSender()] = true;
     
@@ -332,15 +335,18 @@ contract Energy8 is Context, Ownable, IERC20 {
         _balances[feeWallet] = _balances[feeWallet].add(feeInTokens);
         emit Transfer(sender, feeWallet, feeInTokens);
     }
-    
-    uint256 contractTokenBalance = _balances[address(this)];
 
     if (liquidityFeeInTokens > 0) {
-        contractTokenBalance = contractTokenBalance.add(liquidityFeeInTokens);
+        uint256 contractTokenBalance = _balances[address(this)].add(liquidityFeeInTokens);
+
         _balances[address(this)] = contractTokenBalance;
         emit Transfer(sender, address(this), liquidityFeeInTokens);
         
-        if (!isLocked && sender != pair && contractTokenBalance >= minTokensForLiquidityGeneration) {
+        if (
+          !isLocked &&
+          sender != pair &&
+          contractTokenBalance >= minTokensForLiquidityGeneration
+        ) {
             generateLiquidity(contractTokenBalance);
         }
     }
@@ -382,7 +388,7 @@ contract Energy8 is Context, Ownable, IERC20 {
         tokensForLiquidity,
         0, // slippage is unavoidable
         0, // slippage is unavoidable
-        0x000000000000000000000000000000000000dEaD,
+        DEAD,
         block.timestamp
     );
   }
@@ -446,28 +452,6 @@ contract Energy8 is Context, Ownable, IERC20 {
     periodDuration = time;
   }
   
-  function isSeller(address account) external view returns (bool) {
-      return _sellers[account];
-  }
-  
-  function isWhitelisted(address account) external view returns (bool) {
-      return _whitelist[account];
-  }
-  
-  function isExcludedFromFee(address account) external view returns (bool) {
-      return _feeWhitelist[account];
-  }
-  
-  function isBlacklisted(address account) external view returns (bool) {
-      return _blacklist[account];
-  }
-  
-  function getAccountPeriodInfo(address account) external view returns (uint256 startBalance, uint256 startTime, uint256 spent) {
-      startBalance = _startPeriodBalances[account];
-      startTime = _periodStartTime[account];
-      spent = _spentDuringPeriod[account];
-  }
-  
   function setRouter(IRouter _router) external onlyOwner {
       router = _router;
   }
@@ -484,7 +468,7 @@ contract Energy8 is Context, Ownable, IERC20 {
       minTokensForLiquidityGeneration = amount;
   }
   
-  function setTransferFees(uint16 _fee, uint16 _buyFee, uint16 _sellFee) external onlyOwner {
+  function setTaxFees(uint16 _fee, uint16 _buyFee, uint16 _sellFee) external onlyOwner {
     require(
         _fee <= 1000 && // 0% - 10%
         _buyFee <= 1000 && // 0% - 10%
@@ -512,15 +496,43 @@ contract Energy8 is Context, Ownable, IERC20 {
   }
   
   function setMarketingWallet(address _marketingWallet) external onlyOwner {
+    require(_marketingWallet != feeWallet);
     marketingWallet = _marketingWallet;
   }
 
   function setFeeWallet(address _feeWallet) external onlyOwner {
+    require(_feeWallet != owner() && _feeWallet != marketingWallet);
     feeWallet = _feeWallet;
   }
   
   function disableLiquidityGeneration() external onlyOwner {
     setLiquidityFees(0, 0, 0);
+  }
+  
+  function isSeller(address account) external view returns (bool) {
+      return _sellers[account];
+  }
+  
+  function isWhitelisted(address account) external view returns (bool) {
+      return _whitelist[account];
+  }
+  
+  function isExcludedFromFee(address account) external view returns (bool) {
+      return _feeWhitelist[account];
+  }
+  
+  function isBlacklisted(address account) external view returns (bool) {
+      return _blacklist[account];
+  }
+  
+  function blacklistReason(address account) external view returns (string memory) {
+      return _blacklistReasons[account];
+  }
+  
+  function getAccountPeriodInfo(address account) external view returns (uint256 startBalance, uint256 startTime, uint256 spent) {
+      startBalance = _startPeriodBalances[account];
+      startTime = _periodStartTime[account];
+      spent = _spentDuringPeriod[account];
   }
   
   function _getPercentage(uint256 number, uint16 percent) internal pure returns (uint256) {
