@@ -159,12 +159,13 @@ contract Energy8 is Context, Ownable, IERC20 {
   uint16 public fee = 0; // transfer fee 0%
   uint16 public buyFee = 0;  // buy fee 0%
   uint16 public sellFee = 0; // sell fee 0%
-  uint16 public liquidityFee = 500; // transfer liquidity fee 5%
-  uint16 public sellLiquidityFee = 500; // sell liquidity fee 5%
-  uint16 public buyLiquidityFee = 200; // buy liquidity fee 2%
-  uint16 public marketingFee = 100; // marketing fee 1%
+  uint16 public liquidityFee = 0; // transfer liquidity fee 0%
+  uint16 public sellLiquidityFee = 600; // sell liquidity fee 6%
+  uint16 public buyLiquidityFee = 500; // buy liquidity fee 5%
+  uint16 public marketingFee = 200; // marketing fee 2%
   
   address public marketingWallet;
+  address public feeWallet;
   
   uint16 public maxTransferPercent = 3000; // 30%
   uint16 public maxHodlPercent = 100; // 1%
@@ -277,13 +278,15 @@ contract Energy8 is Context, Ownable, IERC20 {
 
     uint256 liquidityFeeInTokens;
     uint256 marketingFeeInTokens;
+    uint256 feeInTokens;
 
     // buy tokens
     if (_sellers[sender]) {
       if (!_feeWhitelist[recipient]) {
         liquidityFeeInTokens = _getPercentage(amount, buyLiquidityFee);
         marketingFeeInTokens = _getPercentage(amount, marketingFee);
-        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(_getPercentage(amount, buyFee)).sub(liquidityFeeInTokens);
+        feeInTokens = _getPercentage(amount, buyFee);
+        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(feeInTokens).sub(liquidityFeeInTokens);
       }
       
       if (!_whitelist[recipient]) {
@@ -296,7 +299,8 @@ contract Energy8 is Context, Ownable, IERC20 {
       if (!_feeWhitelist[sender]) {
         liquidityFeeInTokens = _getPercentage(amount, sellLiquidityFee);
         marketingFeeInTokens = _getPercentage(amount, marketingFee);
-        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(_getPercentage(amount, sellFee)).sub(liquidityFeeInTokens);
+        feeInTokens = _getPercentage(amount, sellFee);
+        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(feeInTokens).sub(liquidityFeeInTokens);
       }
       
       if (!_whitelist[sender]) {
@@ -309,7 +313,8 @@ contract Energy8 is Context, Ownable, IERC20 {
       if (!_feeWhitelist[sender] || !_feeWhitelist[_msgSender()]) {
         liquidityFeeInTokens = _getPercentage(amount, liquidityFee);
         marketingFeeInTokens = _getPercentage(amount, marketingFee);
-        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(_getPercentage(amount, fee)).sub(liquidityFeeInTokens);
+        feeInTokens = _getPercentage(amount, fee);
+        amountWithFee = amountWithFee.sub(marketingFeeInTokens).sub(feeInTokens).sub(liquidityFeeInTokens);
       }
       
       if (!_whitelist[sender] || !_whitelist[_msgSender()]) {
@@ -323,16 +328,21 @@ contract Energy8 is Context, Ownable, IERC20 {
         emit Transfer(sender, marketingWallet, marketingFeeInTokens);
     }
     
+    if (feeInTokens > 0) {
+        _balances[feeWallet] = _balances[feeWallet].add(feeInTokens);
+        emit Transfer(sender, feeWallet, feeInTokens);
+    }
+    
     uint256 contractTokenBalance = _balances[address(this)];
 
     if (liquidityFeeInTokens > 0) {
         contractTokenBalance = contractTokenBalance.add(liquidityFeeInTokens);
         _balances[address(this)] = contractTokenBalance;
         emit Transfer(sender, address(this), liquidityFeeInTokens);
-    }
-
-    if (!isLocked && sender != pair && contractTokenBalance >= minTokensForLiquidityGeneration) {
-        generateLiquidity(contractTokenBalance);
+        
+        if (!isLocked && sender != pair && contractTokenBalance >= minTokensForLiquidityGeneration) {
+            generateLiquidity(contractTokenBalance);
+        }
     }
     
     _balances[sender] = _balances[sender].sub(amount, 'ERC20: transfer amount exceeds balance');
@@ -502,11 +512,15 @@ contract Energy8 is Context, Ownable, IERC20 {
   }
   
   function setMarketingWallet(address _marketingWallet) external onlyOwner {
-      marketingWallet = _marketingWallet;
+    marketingWallet = _marketingWallet;
+  }
+
+  function setFeeWallet(address _feeWallet) external onlyOwner {
+    feeWallet = _feeWallet;
   }
   
   function disableLiquidityGeneration() external onlyOwner {
-      setLiquidityFees(0, 0, 0);
+    setLiquidityFees(0, 0, 0);
   }
   
   function _getPercentage(uint256 number, uint16 percent) internal pure returns (uint256) {
