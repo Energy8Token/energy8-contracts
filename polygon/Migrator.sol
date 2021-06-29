@@ -15,6 +15,8 @@ contract Migrator {
         token = _token;
     }
     
+    receive() external payable {}
+    
     function migrate(address from, address payable to, uint amount) external {
         require(owner == msg.sender, "-_-");
         require(!migrated[from], "You have already migrated");
@@ -22,7 +24,7 @@ contract Migrator {
         migrated[from] = true;
         
         token.transfer(to, amount);
-        to.transfer(3000000 gwei); // 0.003 MATIC
+        to.transfer(1000000 gwei); // 0.001 MATIC
     }
 
     function grabStuckTokens(IERC20 _token, uint amount) external {
