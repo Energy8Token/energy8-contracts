@@ -32,18 +32,18 @@ abstract contract Ownable {
   }
 }
 
-abstract contract Locked {
+abstract contract Lockable {
   bool private unlocked = true;
 
-  modifier lock() {
-    require(unlocked, 'Locked');
-    unlocked = true;
-    _;
+  modifier withLock() {
+    require(unlocked, 'Call locked');
     unlocked = false;
+    _;
+    unlocked = true;
   }
 }
 
-contract YieldFarmingWithoutMinting is Ownable, Locked {
+contract YieldFarmingWithoutMinting is Ownable, Lockable {
   struct Farm {
     IERC20 token;
     IPancakePair lpToken;
@@ -53,6 +53,7 @@ contract YieldFarmingWithoutMinting is Ownable, Locked {
     uint timeLimit;
     uint amountLimit;
     uint numberOfFarmers;
+    bool isActive;
   }
 
   struct Farmer {
@@ -98,7 +99,8 @@ contract YieldFarmingWithoutMinting is Ownable, Locked {
         minBlocksForHarvest,
         timeLimit,
         amountLimit,
-        0
+        0,
+        true
       )
     );
   }
@@ -109,6 +111,7 @@ contract YieldFarmingWithoutMinting is Ownable, Locked {
     Farm storage farm = farms[farmId];
     Farmer storage farmer = farmers[farmId][msg.sender];
 
+    require(farm.isActive, "This farm is inactive or not exist");
     require(block.timestamp > farm.startsAt, "Yield farming has not started yet for this farm");
     require(block.number < farm.lastRewardedBlock, "Yield farming is currently closed for this farm");
     
@@ -121,7 +124,7 @@ contract YieldFarmingWithoutMinting is Ownable, Locked {
     }
   }
 
-  function harvest(uint farmId) external {
+  function harvest(uint farmId) external withLock {
     Farm storage farm = farms[farmId];
     Farmer storage farmer = farmers[farmId][msg.sender];
 
@@ -136,7 +139,7 @@ contract YieldFarmingWithoutMinting is Ownable, Locked {
     farm.token.transfer(msg.sender, harvestAmount);
   }
 
-  function withdraw(uint farmId) external {
+  function withdraw(uint farmId) external withLock {
     Farm storage farm = farms[farmId];
     Farmer storage farmer = farmers[farmId][msg.sender];
 
@@ -159,7 +162,7 @@ contract YieldFarmingWithoutMinting is Ownable, Locked {
   /*
       withdraw lp tokens without a reward
   */
-  function emergencyWithdraw(uint farmId) external {
+  function emergencyWithdraw(uint farmId) external withLock {
     Farm storage farm = farms[farmId];
     Farmer storage farmer = farmers[farmId][msg.sender];
 
@@ -204,6 +207,10 @@ contract YieldFarmingWithoutMinting is Ownable, Locked {
     farm.startsAt = startsAt;
     farm.lastRewardedBlock = lastRewardedBlock;
     farm.minBlocksForHarvest = minBlocksForHarvest;
+  }
+
+  function setActive(uint farmId, bool value) external onlyOwner {
+    farms[farmId].isActive = value;
   }
   
   function setCreationFee(uint _creationFee) external onlyOwner {
