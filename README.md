@@ -1,12 +1,14 @@
-<center>
+<p align="center">
     <img src="https://i.imgur.com/r1Q2ITc.png">
-    <h1><a href="https://energy8.games">Energy 8</a></h1>
-    <a href="https://quickswap.exchange/#/swap?outputCurrency=0x08e175a1eac9744a0f1ccaeb8f669af6a2bda3ce">Buy</a> |
-    <a href="https://polygon.poocoin.app/tokens/0x08e175a1eac9744a0f1ccaeb8f669af6a2bda3ce">Live chart</a> |
-    <a href="https://quickswap.exchange/#/swap?outputCurrency=0x08e175a1eac9744a0f1ccaeb8f669af6a2bda3ce">Whitepaper</a> |
-    <a href="https://energy8.io">Dapp</a> |
-    Telegram Chat <a href="https://t.me/energy8rus">🇷🇺</a> <a href="https://t.me/energy8eng">🌎</a>
-</center>
+    <h1 align="center"><a href="https://energy8.games">Energy 8</a></h1>
+    <p align="center">
+        <a href="https://quickswap.exchange/#/swap?outputCurrency=0x08e175a1eac9744a0f1ccaeb8f669af6a2bda3ce">Buy</a> |
+        <a href="https://polygon.poocoin.app/tokens/0x08e175a1eac9744a0f1ccaeb8f669af6a2bda3ce">Live chart</a> |
+        <a href="https://quickswap.exchange/#/swap?outputCurrency=0x08e175a1eac9744a0f1ccaeb8f669af6a2bda3ce">Whitepaper</a> |
+        <a href="https://energy8.io">Dapp</a> |
+        Telegram Chat <a href="https://t.me/energy8rus">🇷🇺</a> <a href="https://t.me/energy8eng">🌎</a>
+    </p>
+</p>
 <hr>
 The uniqueness of this token is that it is not affected by speculative actions. The wallets are limited to the selling once a day and no more than 30% of the balance. Each person can have no more than 1% of the total number of tokens. The main goal of the token is payment for virtual exclusive necessities within the game and mining of ENERGY 8 in computer games, with the possibility of staking this currency. Currently, ENERGY 8 supports 2 PC games Minecraft and GTA 5. Future plan involves integration of ENERGY 8 into other games.
 
