@@ -3,6 +3,7 @@
 pragma solidity ^0.8.0;
 
 interface IERC20 {
+  function name() external view returns (string memory);
   function balanceOf(address account) external view returns (uint256);
   function transfer(address recipient, uint amount) external returns (bool);
 }
@@ -10,13 +11,14 @@ interface IERC20 {
 interface IPancakePair {
   function token0() external view returns (address);
   function token1() external view returns (address);
+  function name() external view returns (string memory);
   function balanceOf(address owner) external view returns (uint);
   function transfer(address recipient, uint amount) external returns (bool);
   function transferFrom(address sender, address recipient, uint amount) external returns (bool);
 }
 
 abstract contract Ownable {
-  address private _owner;
+  address internal _owner;
 
   modifier onlyOwner() {
     require(_owner == msg.sender, "-_-");
@@ -25,10 +27,6 @@ abstract contract Ownable {
 
   constructor() {
     _owner = msg.sender;
-  }
-
-  function owner() internal view returns (address) {
-    return _owner;
   }
 }
 
@@ -47,22 +45,26 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
   struct Farm {
     IERC20 token;
     IPancakePair lpToken;
+    string token0Symbol;
+    string token1Symbol;
+    uint id;
     uint startsAt;
     uint lastRewardedBlock;
-    uint minBlocksForHarvest;
-    uint timeLimit;
-    uint amountLimit;
+    uint lpLockTime;
     uint numberOfFarmers;
+    uint lpTotalAmount;
     bool isActive;
   }
 
   struct Farmer {
     uint balance;
     uint startBlock;
+    uint startTime;
   }
 
   Farm[] public farms;
-  mapping(uint => mapping (address => Farmer)) private farmers;
+  mapping(uint => mapping (address => Farmer)) private _farmers;
+  mapping(address => bool) private _pools;
 
   uint public creationFee;
 
@@ -77,11 +79,11 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     IPancakePair lpToken,
     uint startsAt,
     uint lastRewardedBlock,
-    uint minBlocksForHarvest,
-    uint timeLimit,
-    uint amountLimit
+    uint lpLockTime
   ) external payable {
-    if (msg.sender != owner()) {
+    require(!_pools[address(lpToken)], "This pool is already exist");
+
+    if (msg.sender != _owner) {
       require(msg.value >= creationFee);
     }
 
@@ -90,108 +92,109 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
 
     require(token0 == address(token) || token1 == address(token));
 
+    _pools[address(lpToken)] = true;
+
     farms.push(
-      Farm(
-        token,
-        lpToken,
-        startsAt,
-        lastRewardedBlock,
-        minBlocksForHarvest,
-        timeLimit,
-        amountLimit,
-        0,
-        true
-      )
+      Farm({
+        token: token,
+        lpToken: lpToken,
+        token0Symbol: IERC20(token0).name(),
+        token1Symbol: IERC20(token1).name(),
+        id: farms.length,
+        startsAt: startsAt,
+        lastRewardedBlock: lastRewardedBlock,
+        lpLockTime: lpLockTime,
+        numberOfFarmers: 0,
+        lpTotalAmount: 0,
+        isActive: true
+      })
     );
   }
   
-  function stake(uint farmId, uint amount) external {
+  function stake(uint farmId, uint amount) external withLock {
     require(amount > 0, "Amount must be greater than zero");
 
     Farm storage farm = farms[farmId];
-    Farmer storage farmer = farmers[farmId][msg.sender];
+    Farmer storage farmer = _farmers[farmId][msg.sender];
 
     require(farm.isActive, "This farm is inactive or not exist");
     require(block.timestamp > farm.startsAt, "Yield farming has not started yet for this farm");
     require(block.number < farm.lastRewardedBlock, "Yield farming is currently closed for this farm");
     
     farm.lpToken.transferFrom(msg.sender, address(this), amount);
+    farm.lpTotalAmount += amount;
     farmer.balance += amount;
 
     if (farmer.startBlock == 0) {
       farm.numberOfFarmers += 1;
       farmer.startBlock = block.number;
+      farmer.startTime = block.timestamp;
     }
-  }
-
-  function harvest(uint farmId) external withLock {
-    Farm storage farm = farms[farmId];
-    Farmer storage farmer = farmers[farmId][msg.sender];
-
-    uint startBlock = farmer.startBlock;
-
-    require(startBlock != 0, "You are not a farmer");
-    require(block.number >= startBlock + farm.minBlocksForHarvest, "Too early for harvest");
-
-    uint amount = farmer.balance;
-    uint harvestAmount = _calculateYield(farm, amount, startBlock);
-
-    farm.token.transfer(msg.sender, harvestAmount);
-  }
-
-  function withdraw(uint farmId) external withLock {
-    Farm storage farm = farms[farmId];
-    Farmer storage farmer = farmers[farmId][msg.sender];
-
-    uint startBlock = farmer.startBlock;
-    
-    require(startBlock != 0, "You are not a farmer");
-    require(block.number >= startBlock + farm.minBlocksForHarvest, "Too early for harvest");
-
-    uint amount = farmer.balance;
-    uint harvestAmount = _calculateYield(farm, amount, startBlock);
-
-    farm.lpToken.transfer(msg.sender, amount);
-    farm.token.transfer(msg.sender, harvestAmount);
-    farm.numberOfFarmers -= 1;
-
-    farmer.startBlock = 0;
-    farmer.balance = 0;
   }
 
   /*
-      withdraw lp tokens without a reward
+    withdraw only reward
+  */
+  function harvest(uint farmId) external withLock {
+    _withdrawHarvest(farms[farmId], _farmers[farmId][msg.sender]);
+  }
+
+  /*
+    withdraw both lp tokens and reward
+  */
+  function withdraw(uint farmId) external withLock {
+    Farm storage farm = farms[farmId];
+    Farmer storage farmer = _farmers[farmId][msg.sender];
+    
+    _withdrawHarvest(farm, farmer);
+    _withdrawLP(farm, farmer);
+  }
+
+  /*
+    withdraw only lp tokens
   */
   function emergencyWithdraw(uint farmId) external withLock {
-    Farm storage farm = farms[farmId];
-    Farmer storage farmer = farmers[farmId][msg.sender];
+    _withdrawLP(farms[farmId], _farmers[farmId][msg.sender]);
+  }
 
+  function _withdrawLP(Farm storage farm, Farmer storage farmer) internal {
     uint amount = farmer.balance;
 
-    require(amount > 0, "Amount must be greater than zero");
+    require(amount > 0, "Balance must be greater than zero");
 
     farm.lpToken.transfer(msg.sender, amount);
     farm.numberOfFarmers -= 1;
+    farm.lpTotalAmount -= amount;
+
     farmer.startBlock = 0;
+    farmer.startTime = 0;
     farmer.balance = 0;
+  }
+
+  function _withdrawHarvest(Farm memory farm, Farmer memory farmer) internal {
+    require(farmer.startBlock != 0, "You are not a farmer");
+    require(block.timestamp >= farmer.startTime + farm.lpLockTime, "Too early for withdraw");
+
+    uint harvestAmount = _calculateYield(farm, farmer);
+
+    farm.token.transfer(msg.sender, harvestAmount);
   }
   
   function yield(uint farmId) external view returns (uint) {
-    Farmer storage farmer = farmers[farmId][msg.sender];
-
-    return _calculateYield(farms[farmId], farmer.balance, farmer.startBlock);
+    return _calculateYield(farms[farmId], _farmers[farmId][msg.sender]);
   }
 
-  function _calculateYield(Farm memory farm, uint balance, uint fromBlock) internal view returns (uint) {
-    uint lpBalance = farm.lpToken.balanceOf(address(this));
+  function _calculateYield(Farm memory farm, Farmer memory farmer) internal view returns (uint) {
+    uint lpTotalAmount = farm.lpTotalAmount;
+    uint startBlock = farmer.startBlock;
 
-    if (lpBalance == 0 || fromBlock == 0) {
+    if (lpTotalAmount == 0 || startBlock == 0) {
       return 0;
     }
-
-    uint rewardedBlocks = block.number - fromBlock;
+    
+    uint rewardedBlocks = block.number - startBlock;
     uint tokensPerFarmer = (rewardedBlocks * farm.token.balanceOf(address(this))) / farm.lastRewardedBlock;
-    uint balanceRate = (balance * 10**9) / lpBalance;
+    uint balanceRate = (farmer.balance * 10**9) / lpTotalAmount;
 
     return (tokensPerFarmer * balanceRate) / 10**9;
   }
@@ -200,13 +203,13 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     uint farmId,
     uint startsAt,
     uint lastRewardedBlock,
-    uint minBlocksForHarvest
+    uint lpLockTime
   ) external onlyOwner {
     Farm storage farm = farms[farmId];
 
     farm.startsAt = startsAt;
     farm.lastRewardedBlock = lastRewardedBlock;
-    farm.minBlocksForHarvest = minBlocksForHarvest;
+    farm.lpLockTime = lpLockTime;
   }
 
   function setActive(uint farmId, bool value) external onlyOwner {

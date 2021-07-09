@@ -1,0 +1,274 @@
+[
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_creationFee",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "nonpayable",
+		"type": "constructor"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "contract IERC20",
+				"name": "token",
+				"type": "address"
+			},
+			{
+				"internalType": "contract IPancakePair",
+				"name": "lpToken",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "startsAt",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "blocksDuration",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lpLockTime",
+				"type": "uint256"
+			}
+		],
+		"name": "createFarm",
+		"outputs": [],
+		"stateMutability": "payable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "creationFee",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			}
+		],
+		"name": "emergencyWithdraw",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "farms",
+		"outputs": [
+			{
+				"internalType": "contract IERC20",
+				"name": "token",
+				"type": "address"
+			},
+			{
+				"internalType": "contract IPancakePair",
+				"name": "lpToken",
+				"type": "address"
+			},
+			{
+				"internalType": "string",
+				"name": "token0Symbol",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "token1Symbol",
+				"type": "string"
+			},
+			{
+				"internalType": "uint256",
+				"name": "id",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "startsAt",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lastRewardedBlock",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lpLockTime",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "numberOfFarmers",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lpTotalAmount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "isActive",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			}
+		],
+		"name": "harvest",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "value",
+				"type": "bool"
+			}
+		],
+		"name": "setActive",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "_creationFee",
+				"type": "uint256"
+			}
+		],
+		"name": "setCreationFee",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "amount",
+				"type": "uint256"
+			}
+		],
+		"name": "stake",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "startsAt",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lastRewardedBlock",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "lpLockTime",
+				"type": "uint256"
+			}
+		],
+		"name": "updateFarm",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			}
+		],
+		"name": "withdraw",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "withdrawFees",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			}
+		],
+		"name": "yield",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"stateMutability": "payable",
+		"type": "receive"
+	}
+]
