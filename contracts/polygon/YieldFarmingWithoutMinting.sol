@@ -2,44 +2,11 @@
 
 pragma solidity ^0.8.0;
 
-interface IERC20 {
-  function name() external view returns (string memory);
-  function balanceOf(address account) external view returns (uint256);
-  function transfer(address recipient, uint amount) external returns (bool);
-}
+import './interfaces/IERC20.sol';
+import './interfaces/IPancakePair.sol';
 
-interface IPancakePair {
-  function token0() external view returns (address);
-  function token1() external view returns (address);
-  function name() external view returns (string memory);
-  function balanceOf(address owner) external view returns (uint);
-  function transfer(address recipient, uint amount) external returns (bool);
-  function transferFrom(address sender, address recipient, uint amount) external returns (bool);
-}
-
-abstract contract Ownable {
-  address internal _owner;
-
-  modifier onlyOwner() {
-    require(_owner == msg.sender, "-_-");
-    _;
-  }
-
-  constructor() {
-    _owner = msg.sender;
-  }
-}
-
-abstract contract Lockable {
-  bool private unlocked = true;
-
-  modifier withLock() {
-    require(unlocked, 'Call locked');
-    unlocked = false;
-    _;
-    unlocked = true;
-  }
-}
+import './utils/Ownable.sol';
+import './utils/Lockable.sol';
 
 contract YieldFarmingWithoutMinting is Ownable, Lockable {
   struct Farm {
