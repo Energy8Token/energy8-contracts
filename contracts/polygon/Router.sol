@@ -4,12 +4,14 @@ pragma solidity ^0.8.0;
 
 import './interfaces/IERC20.sol';
 
+import './utils/Ownable.sol';
+
 interface IRouter {
   event Deposit(uint32 serverId, string username, address indexed sender, uint256 value);
   event Withdraw(uint32 serverId, string username, address indexed recipient, uint256 value);
 }
 
-contract Router is IRouter {
+contract Router is IRouter, Ownable {
   struct Game {
     string name; // readable game name for dapp
     string icon; // link to the game icon for dapp
@@ -33,22 +35,15 @@ contract Router is IRouter {
   Game[] public games;
   Server[] public servers;
 
-  address private owner;
   address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
   IERC20 private token;
 
-  modifier onlyOwner() {
-    require(owner == msg.sender, "-_-");
-    _;
-  }
-
   modifier onlyOwnerOrServerAdmin(uint32 serverId) {
-    require(owner == msg.sender || servers[serverId].adminAddress == msg.sender, "-_-");
+    require(_owner == msg.sender || servers[serverId].adminAddress == msg.sender, "-_-");
     _;
   }
   
   constructor(IERC20 _token) {
-    owner = msg.sender;
     token = _token;
   }
   

@@ -26,4 +26,4 @@ The uniqueness of this token is that it is not affected by speculative actions. 
     Migrator: 0x458dC0449e616375551A8F36af5de05476f6d896
     Router: 0x9D87361D435707ED3a3135A3eFEc21Ef4C4d048a
     YieldFarmingWithoutMinting: 0x673106C0681a8fBFF7C13Aa1666ce61cd34C7B7f
-    NoLimitTransfer: *not deployed*
+    NoLimitTransfer: 0xb1ba7a177ab2D388b1C85616CBBd5DDEF50632ee

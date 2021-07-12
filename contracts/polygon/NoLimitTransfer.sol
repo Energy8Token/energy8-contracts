@@ -10,7 +10,7 @@ import './utils/Ownable.sol';
     Using this contract, people can transfer their coins bypassing
     any limits of the Energy 8 token. But in order not to violate the
     tokenomics, there is a small condition: you can transfer coins
-    using this contract only once every 24 hours.
+    using this contract only once every 2 days.
 
     When is it needed:
     - a person wants to quickly transfer all their coins to another wallet
@@ -19,10 +19,12 @@ import './utils/Ownable.sol';
     We trust our holders and are confident that they will only use this contract for good purposes.
 */
 contract NoLimitTransfer is Ownable {
-    mapping (address => uint) public lastTransferTime;
+    mapping (address => uint) private lastTransferTime;
     mapping (address => bool) private _senderBlacklist;
     mapping (address => bool) private _recipientBlacklist;
-    uint private timeLimit = 1 days;
+
+    bool private isEnable = true;
+    uint private timeLimit = 2 days;
 
     IERC20 private _token;
 
@@ -31,13 +33,14 @@ contract NoLimitTransfer is Ownable {
     }
 
     function transfer(address to, uint amount) external {
+        require(isEnable, "The contract is currently disabled");
         require(!_senderBlacklist[msg.sender], "You are blacklisted ;_;");
         require(!_recipientBlacklist[to], "Recipient is blacklisted ;_;");
         require(block.timestamp >= lastTransferTime[msg.sender] + timeLimit, "You cannot transfer tokens yet");
 
-        _token.transferFrom(msg.sender, to, amount);
-
         lastTransferTime[msg.sender] = block.timestamp;
+
+        _token.transferFrom(msg.sender, to, amount);
     }
 
     function resetTransferTime(address account) external onlyOwner {
@@ -54,5 +57,17 @@ contract NoLimitTransfer is Ownable {
 
     function setRecipientBlacklist(address account, bool value) external onlyOwner {
         _recipientBlacklist[account] = value;
+    }
+
+    function setEnable(bool value) external onlyOwner {
+        isEnable = value;
+    }
+
+    function canTransfer(address account) public view returns (bool) {
+        return block.timestamp >= lastTransferTime[account] + timeLimit;
+    }
+
+    function canTransfer() external view returns (bool) {
+        return canTransfer(msg.sender);
     }
 }
