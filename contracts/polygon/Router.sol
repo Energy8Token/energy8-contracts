@@ -7,8 +7,8 @@ import './interfaces/IERC20.sol';
 import './utils/Ownable.sol';
 
 interface IRouter {
-  event Deposit(uint32 serverId, string username, address indexed sender, uint256 value);
-  event Withdraw(uint32 serverId, string username, address indexed recipient, uint256 value);
+  event Deposit(uint32 serverId, string username, address indexed sender, uint value);
+  event Withdraw(uint32 serverId, string username, address indexed recipient, uint value);
 }
 
 contract Router is IRouter, Ownable {
@@ -22,7 +22,7 @@ contract Router is IRouter, Ownable {
     string name; // readable server name for dapp
     string icon; // link to the server icon for dapp. If not, then you need to use the game icon 
     address adminAddress;
-    uint32 gameId;
+    uint8 gameId;
     uint32 depositFeeAdmin;
     uint32 depositBurn;
     uint32 depositFee;
@@ -36,18 +36,18 @@ contract Router is IRouter, Ownable {
   Server[] public servers;
 
   address private constant DEAD = 0x000000000000000000000000000000000000dEaD;
-  IERC20 private token;
+  IERC20 private immutable _token;
 
   modifier onlyOwnerOrServerAdmin(uint32 serverId) {
     require(_owner == msg.sender || servers[serverId].adminAddress == msg.sender, "-_-");
     _;
   }
   
-  constructor(IERC20 _token) {
-    token = _token;
+  constructor(IERC20 token) {
+    _token = token;
   }
   
-  function deposit(uint32 serverId, string calldata nickname, uint256 amount) external {
+  function deposit(uint32 serverId, string calldata nickname, uint amount) external {
     require(amount > 0, "Amount must be greater than 0");
 
     Server storage server = servers[serverId];
@@ -55,20 +55,20 @@ contract Router is IRouter, Ownable {
     require(games[server.gameId].isActive, "The game of this server not found or inactive");
     require(server.isActive, "The server not found or inactive");
     
-    uint256 adminFeeAmount = _getPercentage(amount, server.depositFeeAdmin);
-    uint256 burnAmount = _getPercentage(amount, server.depositBurn);
-    uint256 feeAmount = _getPercentage(amount, server.depositFee);
+    uint adminFeeAmount = _getPercentage(amount, server.depositFeeAdmin);
+    uint burnAmount = _getPercentage(amount, server.depositBurn);
+    uint feeAmount = _getPercentage(amount, server.depositFee);
     
-    uint256 depositAmount = amount - adminFeeAmount - burnAmount - feeAmount;
+    uint depositAmount = amount - adminFeeAmount - burnAmount - feeAmount;
 
-    token.transferFrom(msg.sender, address(this), amount);
+    _token.transferFrom(msg.sender, address(this), amount);
 
     if (burnAmount > 0) {
-      token.transfer(DEAD, burnAmount);
+      _token.transfer(DEAD, burnAmount);
     }
 
     if (adminFeeAmount > 0) {
-      token.transfer(server.adminAddress, adminFeeAmount);
+      _token.transfer(server.adminAddress, adminFeeAmount);
     }
 
     emit Deposit(serverId, nickname, msg.sender, depositAmount);
@@ -83,25 +83,25 @@ contract Router is IRouter, Ownable {
     In future versions of the router this will be rewritten
     and there will be no centralized server 
   */
-  function withdraw(uint32 serverId, address recipient, string calldata nickname, uint256 amount) external onlyOwner {
+  function withdraw(uint32 serverId, address recipient, string calldata nickname, uint amount) external onlyOwner {
     require(amount > 0, "Amount must be greater than 0");
 
     Server storage server = servers[serverId];
     
-    uint256 adminFeeAmount = _getPercentage(amount, server.withdrawFeeAdmin);
-    uint256 burnAmount = _getPercentage(amount, server.withdrawBurn);
-    uint256 feeAmount = _getPercentage(amount, server.withdrawFee);
+    uint adminFeeAmount = _getPercentage(amount, server.withdrawFeeAdmin);
+    uint burnAmount = _getPercentage(amount, server.withdrawBurn);
+    uint feeAmount = _getPercentage(amount, server.withdrawFee);
     
-    uint256 withdrawAmount = amount - adminFeeAmount - burnAmount - feeAmount;
+    uint withdrawAmount = amount - adminFeeAmount - burnAmount - feeAmount;
     
-    token.transfer(recipient, withdrawAmount);
+    _token.transfer(recipient, withdrawAmount);
     
     if (burnAmount > 0) {
-      token.transfer(DEAD, burnAmount);
+      _token.transfer(DEAD, burnAmount);
     }
     
     if (adminFeeAmount > 0) {
-      token.transfer(server.adminAddress, adminFeeAmount);
+      _token.transfer(server.adminAddress, adminFeeAmount);
     }
       
     emit Withdraw(serverId, nickname, recipient, amount);
@@ -113,23 +113,23 @@ contract Router is IRouter, Ownable {
     );
   }
   
-  function addServer(uint32 gameId, string calldata name, string calldata icon, address adminAddress, bool isActive) external onlyOwner {
+  function addServer(uint8 gameId, string calldata name, string calldata icon, address adminAddress, bool isActive) external onlyOwner {
     require(games[gameId].isActive, "The game with this gameId does not exist or inactive");
 
     servers.push(
-      Server(
-        name,
-        icon,
-        adminAddress,
-        gameId,
-        0, // deposit admin fee
-        0, // deposit burn fee
-        0, // deposit fee
-        0, // withdraw admin fee
-        0, // withdraw burn fee
-        0, // withdraw fee
-        isActive
-      )
+      Server({
+        name: name,
+        icon: icon,
+        adminAddress: adminAddress,
+        gameId: gameId,
+        depositFeeAdmin: 0,
+        depositBurn: 0,
+        depositFee: 0,
+        withdrawFeeAdmin: 0,
+        withdrawBurn: 0,
+        withdrawFee: 0,
+        isActive: isActive
+      })
     );
   }
   
@@ -199,19 +199,19 @@ contract Router is IRouter, Ownable {
     games[gameId].isActive = value;
   }
   
-  function grabTokens(IERC20 _token, address wallet, uint256 amount) external onlyOwner {
-    _token.transfer(wallet, amount);
+  function grabStuckTokens(IERC20 token, address wallet, uint amount) external onlyOwner {
+    token.transfer(wallet, amount);
   }
   
-  function serversNumber() external view returns (uint256) {
+  function serversNumber() external view returns (uint) {
     return servers.length;
   }
 
-  function gamesNumber() external view returns (uint256) {
+  function gamesNumber() external view returns (uint) {
       return games.length;
   }
   
-  function _getPercentage(uint256 number, uint32 percent) internal pure returns (uint256) {
+  function _getPercentage(uint number, uint32 percent) internal pure returns (uint) {
     return (number * percent) / 10000;
   }
 }
