@@ -11,6 +11,7 @@ import './utils/Lockable.sol';
 
 contract YieldFarmingWithoutMinting is Ownable, Lockable {
   struct Farm {
+    address creator;
     IERC20 token;
     IPancakePair lpToken;
     uint id;
@@ -37,7 +38,6 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
   uint public creationFee;
 
   event FarmCreated(uint farmId);
-  event FarmUpdated(uint farmId);
 
   constructor(uint _creationFee) {
     creationFee = _creationFee;
@@ -67,6 +67,7 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
 
     farms.push(
       Farm({
+        creator: msg.sender,
         token: token,
         lpToken: lpToken,
         id: farmId,
@@ -84,71 +85,76 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     emit FarmCreated(farmId);
   }
 
-  function smartStake(IPancakeRouter router, uint farmId, uint tokenAAmount, uint tokenBAmount) external {
-    require(tokenAAmount > 0 && tokenBAmount > 0, "Amount must be greater than zero");
+  // function fastStake(IPancakeRouter router, uint farmId, uint tokenAAmount, uint tokenBAmount) external {
+  //   require(tokenAAmount > 0 && tokenBAmount > 0, "Amount must be greater than zero");
 
-    Farm storage farm = farms[farmId];
-    Farmer storage farmer = _farmers[farmId][msg.sender];
+  //   Farm storage farm = farms[farmId];
+  //   Farmer storage farmer = _farmers[farmId][msg.sender];
 
-    IPancakePair pair = farm.lpToken;
+  //   IPancakePair pair = farm.lpToken;
 
-    IERC20 tokenA = IERC20(pair.token0());
-    IERC20 tokenB = IERC20(pair.token1());
+  //   IERC20 tokenA = IERC20(pair.token0());
+  //   IERC20 tokenB = IERC20(pair.token1());
 
-    tokenA.transferFrom(msg.sender, address(this), tokenAAmount);
-    tokenB.transferFrom(msg.sender, address(this), tokenBAmount);
+  //   tokenA.transferFrom(msg.sender, address(this), tokenAAmount);
+  //   tokenB.transferFrom(msg.sender, address(this), tokenBAmount);
 
-    tokenA.approve(address(router), tokenAAmount);
-    tokenB.approve(address(router), tokenBAmount);
+  //   tokenA.approve(address(router), tokenAAmount);
+  //   tokenB.approve(address(router), tokenBAmount);
 
-    (uint amountA, uint amountB, uint liquidity) = router.addLiquidity(
-        address(tokenA),
-        address(tokenB),
-        tokenAAmount,
-        tokenBAmount,
-        0,
-        0,
-        address(this), // send lp tokens directly to this contract
-        block.timestamp
-    );
+  //   (uint amountA, uint amountB, uint liquidity) = router.addLiquidity(
+  //       address(tokenA),
+  //       address(tokenB),
+  //       tokenAAmount,
+  //       tokenBAmount,
+  //       0,
+  //       0,
+  //       address(this), // send lp tokens directly to this contract
+  //       block.timestamp
+  //   );
 
-    if (tokenAAmount > amountA) {
-      tokenA.transfer(msg.sender, tokenAAmount - amountA);
-    }
+  //   if (tokenAAmount > amountA) {
+  //     tokenA.transfer(msg.sender, tokenAAmount - amountA);
+  //   }
 
-    if (tokenBAmount > amountB) {
-      tokenB.transfer(msg.sender, tokenBAmount - amountB);
-    }
+  //   if (tokenBAmount > amountB) {
+  //     tokenB.transfer(msg.sender, tokenBAmount - amountB);
+  //   }
 
-    _stake(farm, farmer, liquidity, false);
-  }
+  //   _stake(farm, farmer, liquidity, false);
+  // }
 
-  function smartStakeNative(IPancakeRouter router, uint farmId, uint tokenAmount) external payable {
-    require(tokenAmount > 0 && msg.value > 0, "Amount must be greater than zero");
+  // function fastStakeNative(IPancakeRouter router, uint farmId, uint tokenAmount) external payable {
+  //   require(tokenAmount > 0, "Amount must be greater than zero");
 
-    Farm storage farm = farms[farmId];
-    Farmer storage farmer = _farmers[farmId][msg.sender];
+  //   Farm storage farm = farms[farmId];
+  //   Farmer storage farmer = _farmers[farmId][msg.sender];
 
-    IERC20 token = farm.token;
+  //   IPancakePair pair = farm.lpToken;
 
-    token.transferFrom(msg.sender, address(this), tokenAmount);
-    token.approve(address(router), tokenAmount);
+  //   address WETH = router.WETH();
+  //   address tokenA = pair.token0();
+  //   address tokenB = pair.token1();
+  //   IERC20 token = IERC20(tokenA == WETH ? tokenB : tokenA);
 
-    (uint addedTokenAmont, , uint liquidity) = router.addLiquidityETH{value: msg.value}(
-        address(token),
-        tokenAmount,
-        0,
-        0,
-        address(this), // send lp tokens directly to this contract
-        block.timestamp
-    );
+  //   token.transferFrom(msg.sender, address(this), tokenAmount);
+  //   token.approve(address(router), tokenAmount);
 
-    if (tokenAmount > addedTokenAmont) {
-      token.transfer(msg.sender, tokenAmount - addedTokenAmont);
-    }
+  //   (uint amountToken, uint amountETH, uint liquidity) = router.addLiquidityETH{value: msg.value}(
+  //       address(token),
+  //       tokenAmount,
+  //       0,
+  //       0,
+  //       address(this), // send lp tokens directly to this contract
+  //       block.timestamp
+  //   );
 
-    _stake(farm, farmer, liquidity, false);
-  }
+  //   if (tokenAmount > amountToken) {
+  //     token.transfer(msg.sender, tokenAmount - amountToken);
+  //   }
+
+  //   _stake(farm, farmer, liquidity, false);
+  // }
   
   function stake(uint farmId, uint amount) external withLock {
     _stake(farms[farmId], _farmers[farmId][msg.sender], amount);
@@ -263,9 +269,10 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     uint lpLockTime,
     uint farmersLimit,
     uint maxStakePerFarmer
-  ) external onlyOwner {
+  ) external {
     Farm storage farm = farms[farmId];
 
+    require(msg.sender == _owner || msg.sender == farm.creator, "Only owner or creator can update this farm");
     require(block.timestamp < farm.startsAt, "You can update only not started farms");
 
     farm.startsAt = startsAt;
@@ -273,8 +280,6 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     farm.lpLockTime = lpLockTime;
     farm.farmersLimit = farmersLimit;
     farm.maxStakePerFarmer = maxStakePerFarmer;
-
-    emit FarmUpdated(farmId);
   }
 
   function setActive(uint farmId, bool value) external onlyOwner {
