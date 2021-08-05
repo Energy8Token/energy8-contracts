@@ -265,7 +265,7 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
   function updateFarm(
     uint farmId,
     uint startsAt,
-    uint lastRewardedBlock,
+    uint blocksDuration,
     uint lpLockTime,
     uint farmersLimit,
     uint maxStakePerFarmer
@@ -276,7 +276,7 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     require(block.timestamp < farm.startsAt, "You can update only not started farms");
 
     farm.startsAt = startsAt;
-    farm.lastRewardedBlock = lastRewardedBlock;
+    farm.lastRewardedBlock = block.number + blocksDuration;
     farm.lpLockTime = lpLockTime;
     farm.farmersLimit = farmersLimit;
     farm.maxStakePerFarmer = maxStakePerFarmer;
