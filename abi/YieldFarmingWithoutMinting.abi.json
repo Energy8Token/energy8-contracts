@@ -11,6 +11,19 @@
 		"type": "constructor"
 	},
 	{
+		"anonymous": false,
+		"inputs": [
+			{
+				"indexed": false,
+				"internalType": "uint256",
+				"name": "farmId",
+				"type": "uint256"
+			}
+		],
+		"name": "FarmCreated",
+		"type": "event"
+	},
+	{
 		"inputs": [
 			{
 				"internalType": "contract IERC20",
@@ -29,12 +42,22 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "blocksDuration",
+				"name": "durationInBlocks",
 				"type": "uint256"
 			},
 			{
 				"internalType": "uint256",
 				"name": "lpLockTime",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "farmersLimit",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "maxStakePerFarmer",
 				"type": "uint256"
 			}
 		],
@@ -80,6 +103,11 @@
 		"name": "farms",
 		"outputs": [
 			{
+				"internalType": "address",
+				"name": "creator",
+				"type": "address"
+			},
+			{
 				"internalType": "contract IERC20",
 				"name": "token",
 				"type": "address"
@@ -88,16 +116,6 @@
 				"internalType": "contract IPancakePair",
 				"name": "lpToken",
 				"type": "address"
-			},
-			{
-				"internalType": "string",
-				"name": "token0Symbol",
-				"type": "string"
-			},
-			{
-				"internalType": "string",
-				"name": "token1Symbol",
-				"type": "string"
 			},
 			{
 				"internalType": "uint256",
@@ -127,6 +145,16 @@
 			{
 				"internalType": "uint256",
 				"name": "lpTotalAmount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "farmersLimit",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "maxStakePerFarmer",
 				"type": "uint256"
 			},
 			{
@@ -214,12 +242,22 @@
 			},
 			{
 				"internalType": "uint256",
-				"name": "lastRewardedBlock",
+				"name": "blocksDuration",
 				"type": "uint256"
 			},
 			{
 				"internalType": "uint256",
 				"name": "lpLockTime",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "farmersLimit",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "maxStakePerFarmer",
 				"type": "uint256"
 			}
 		],
