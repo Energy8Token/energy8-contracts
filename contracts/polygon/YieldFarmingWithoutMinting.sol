@@ -5,6 +5,7 @@ pragma solidity ^0.8.0;
 import './interfaces/IERC20.sol';
 import './interfaces/IPancakePair.sol';
 import './interfaces/IPancakeRouter.sol';
+import './interfaces/IPancakeFactory.sol';
 
 import './utils/Ownable.sol';
 import './utils/Lockable.sol';
@@ -58,10 +59,24 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
       require(msg.value >= creationFee, "You need to pay fee for creating own yield farm");
     }
 
-    require(!_pools[address(lpToken)], "This liquidity pool is already exist");
-    require(lpToken.token0() == address(token) || lpToken.token1() == address(token), "Liquidty pool is invalid");
+    address tokenAddress = address(token);
+    address lpTokenAddress = address(lpToken);
 
-    _pools[address(lpToken)] = true;
+    {
+      require(!_pools[lpTokenAddress], "This liquidity pool is already exist");
+
+      IPancakeFactory factory = IPancakeFactory(lpToken.factory());
+      address pairToken0 = lpToken.token0();
+      address pairToken1 = lpToken.token1();
+      address pairFromFactory = factory.getPair(pairToken0, pairToken1);
+
+      require(
+        pairFromFactory == lpTokenAddress &&
+        (pairToken0 == tokenAddress || pairToken1 == tokenAddress)
+      , "Liquidty pool is invalid");
+    }
+
+    _pools[lpTokenAddress] = true;
 
     uint farmId = farms.length;
 
@@ -84,77 +99,6 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
 
     emit FarmCreated(farmId);
   }
-
-  // function fastStake(IPancakeRouter router, uint farmId, uint tokenAAmount, uint tokenBAmount) external {
-  //   require(tokenAAmount > 0 && tokenBAmount > 0, "Amount must be greater than zero");
-
-  //   Farm storage farm = farms[farmId];
-  //   Farmer storage farmer = _farmers[farmId][msg.sender];
-
-  //   IPancakePair pair = farm.lpToken;
-
-  //   IERC20 tokenA = IERC20(pair.token0());
-  //   IERC20 tokenB = IERC20(pair.token1());
-
-  //   tokenA.transferFrom(msg.sender, address(this), tokenAAmount);
-  //   tokenB.transferFrom(msg.sender, address(this), tokenBAmount);
-
-  //   tokenA.approve(address(router), tokenAAmount);
-  //   tokenB.approve(address(router), tokenBAmount);
-
-  //   (uint amountA, uint amountB, uint liquidity) = router.addLiquidity(
-  //       address(tokenA),
-  //       address(tokenB),
-  //       tokenAAmount,
-  //       tokenBAmount,
-  //       0,
-  //       0,
-  //       address(this), // send lp tokens directly to this contract
-  //       block.timestamp
-  //   );
-
-  //   if (tokenAAmount > amountA) {
-  //     tokenA.transfer(msg.sender, tokenAAmount - amountA);
-  //   }
-
-  //   if (tokenBAmount > amountB) {
-  //     tokenB.transfer(msg.sender, tokenBAmount - amountB);
-  //   }
-
-  //   _stake(farm, farmer, liquidity, false);
-  // }
-
-  // function fastStakeNative(IPancakeRouter router, uint farmId, uint tokenAmount) external payable {
-  //   require(tokenAmount > 0, "Amount must be greater than zero");
-
-  //   Farm storage farm = farms[farmId];
-  //   Farmer storage farmer = _farmers[farmId][msg.sender];
-
-  //   IPancakePair pair = farm.lpToken;
-
-  //   address WETH = router.WETH();
-  //   address tokenA = pair.token0();
-  //   address tokenB = pair.token1();
-  //   IERC20 token = IERC20(tokenA == WETH ? tokenB : tokenA);
-
-  //   token.transferFrom(msg.sender, address(this), tokenAmount);
-  //   token.approve(address(router), tokenAmount);
-
-  //   (uint amountToken, uint amountETH, uint liquidity) = router.addLiquidityETH{value: msg.value}(
-  //       address(token),
-  //       tokenAmount,
-  //       0,
-  //       0,
-  //       address(this), // send lp tokens directly to this contract
-  //       block.timestamp
-  //   );
-
-  //   if (tokenAmount > amountToken) {
-  //     token.transfer(msg.sender, tokenAmount - amountToken);
-  //   }
-
-  //   _stake(farm, farmer, liquidity, false);
-  // }
   
   function stake(uint farmId, uint amount) external withLock {
     _stake(farms[farmId], _farmers[farmId][msg.sender], amount);
@@ -261,6 +205,10 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
 
     return (tokensPerFarmer * balanceRate) / 10**9;
   }
+
+  function me(uint farmId) external view returns (Farmer memory) {
+    return _farmers[farmId][msg.sender];
+  }
   
   function updateFarm(
     uint farmId,
@@ -290,7 +238,7 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     creationFee = _creationFee;
   }
 
-  function withdrawFees() external onlyOwner {
+  function withdrawFee() external onlyOwner {
     payable(_owner).transfer(address(this).balance);
   }
 }
