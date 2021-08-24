@@ -15,12 +15,14 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     address creator;
     IERC20 token;
     IPancakePair lpToken;
+    string name;
     uint id;
     uint startsAt;
     uint lastRewardedBlock;
     uint lpLockTime;
     uint numberOfFarmers;
     uint lpTotalAmount;
+    uint lpTotalLimit;
     uint farmersLimit;
     uint maxStakePerFarmer;
     bool isActive;
@@ -32,10 +34,11 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     uint startTime;
   }
 
-  Farm[] public farms;
+  Farm[] private _farms;
   mapping(uint => mapping (address => Farmer)) private _farmers;
   mapping(address => bool) private _pools;
 
+  uint public farmsCount = 0;
   uint public creationFee;
 
   event FarmCreated(uint farmId);
@@ -53,7 +56,8 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     uint durationInBlocks,
     uint lpLockTime,
     uint farmersLimit,
-    uint maxStakePerFarmer
+    uint maxStakePerFarmer,
+    uint lpTotalLimit
   ) external payable {
     if (msg.sender != _owner) {
       require(msg.value >= creationFee, "You need to pay fee for creating own yield farm");
@@ -61,13 +65,14 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
 
     address tokenAddress = address(token);
     address lpTokenAddress = address(lpToken);
-
+    address pairToken0 = lpToken.token0();
+    address pairToken1 = lpToken.token1();
+      
     {
       require(!_pools[lpTokenAddress], "This liquidity pool is already exist");
 
       IPancakeFactory factory = IPancakeFactory(lpToken.factory());
-      address pairToken0 = lpToken.token0();
-      address pairToken1 = lpToken.token1();
+      
       address pairFromFactory = factory.getPair(pairToken0, pairToken1);
 
       require(
@@ -78,44 +83,48 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
 
     _pools[lpTokenAddress] = true;
 
-    uint farmId = farms.length;
+    uint farmId = farmsCount;
 
-    farms.push(
+    _farms.push(
       Farm({
         creator: msg.sender,
         token: token,
         lpToken: lpToken,
+        name: string(abi.encodePacked(IERC20(pairToken0).symbol(), "-", IERC20(pairToken1).symbol())),
         id: farmId,
         startsAt: startsAt,
         lastRewardedBlock: block.number + durationInBlocks,
         lpLockTime: lpLockTime,
         numberOfFarmers: 0,
         lpTotalAmount: 0,
+        lpTotalLimit: lpTotalLimit,
         farmersLimit: farmersLimit,
         maxStakePerFarmer: maxStakePerFarmer,
         isActive: true
       })
     );
+    
+    farmsCount += 1;
 
     emit FarmCreated(farmId);
   }
   
   function stake(uint farmId, uint amount) external withLock {
-    _stake(farms[farmId], _farmers[farmId][msg.sender], amount);
+    _stake(_farms[farmId], _farmers[farmId][msg.sender], amount);
   }
 
   /*
     withdraw only reward
   */
   function harvest(uint farmId) external withLock {
-    _withdrawHarvest(farms[farmId], _farmers[farmId][msg.sender]);
+    _withdrawHarvest(_farms[farmId], _farmers[farmId][msg.sender]);
   }
 
   /*
     withdraw both lp tokens and reward
   */
   function withdraw(uint farmId) external withLock {
-    Farm storage farm = farms[farmId];
+    Farm storage farm = _farms[farmId];
     Farmer storage farmer = _farmers[farmId][msg.sender];
     
     _withdrawHarvest(farm, farmer);
@@ -126,7 +135,7 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     withdraw only lp tokens
   */
   function emergencyWithdraw(uint farmId) external withLock {
-    _withdrawLP(farms[farmId], _farmers[farmId][msg.sender]);
+    _withdrawLP(_farms[farmId], _farmers[farmId][msg.sender]);
   }
 
   function _stake(Farm storage farm, Farmer storage farmer, uint amount) internal {
@@ -141,9 +150,14 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
 
     uint farmersLimit = farm.farmersLimit;
     uint maxStakePerFarmer = farm.maxStakePerFarmer;
+    uint lpTotalLimit = farm.lpTotalLimit;
 
     if (farmersLimit != 0) {
       require(farm.numberOfFarmers <= farmersLimit, "This farm is already full");
+    }
+    
+    if (lpTotalLimit != 0) {
+      require(farm.lpTotalAmount + amount <= lpTotalLimit, "This farm is already full");
     }
 
     if (maxStakePerFarmer != 0) {
@@ -178,17 +192,20 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     farmer.balance = 0;
   }
 
-  function _withdrawHarvest(Farm memory farm, Farmer memory farmer) internal {
+  function _withdrawHarvest(Farm memory farm, Farmer storage farmer) internal {
     require(farmer.startBlock != 0, "You are not a farmer");
     require(block.timestamp >= farmer.startTime + farm.lpLockTime, "Too early for withdraw");
 
     uint harvestAmount = _calculateYield(farm, farmer);
 
+    farmer.startBlock = block.number;
+    farmer.startTime = block.timestamp;
+
     farm.token.transfer(msg.sender, harvestAmount);
   }
   
   function yield(uint farmId) external view returns (uint) {
-    return _calculateYield(farms[farmId], _farmers[farmId][msg.sender]);
+    return _calculateYield(_farms[farmId], _farmers[farmId][msg.sender]);
   }
 
   function _calculateYield(Farm memory farm, Farmer memory farmer) internal view returns (uint) {
@@ -209,7 +226,7 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
   function me(uint farmId) external view returns (Farmer memory) {
     return _farmers[farmId][msg.sender];
   }
-  
+
   function updateFarm(
     uint farmId,
     uint startsAt,
@@ -218,7 +235,7 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
     uint farmersLimit,
     uint maxStakePerFarmer
   ) external {
-    Farm storage farm = farms[farmId];
+    Farm storage farm = _farms[farmId];
 
     require(msg.sender == _owner || msg.sender == farm.creator, "Only owner or creator can update this farm");
     require(block.timestamp < farm.startsAt, "You can update only not started farms");
@@ -231,11 +248,24 @@ contract YieldFarmingWithoutMinting is Ownable, Lockable {
   }
 
   function setActive(uint farmId, bool value) external onlyOwner {
-    farms[farmId].isActive = value;
+    _farms[farmId].isActive = value;
   }
   
   function setCreationFee(uint _creationFee) external onlyOwner {
     creationFee = _creationFee;
+  }
+  
+  function farms(uint start, uint size) public view returns (Farm[] memory){
+      Farm[] memory arrFarms = new Farm[](farmsCount);
+      
+      uint end = start + size > farmsCount ? farmsCount : start + size;
+
+      for (uint i = start; i < end; i++) {
+          Farm storage farm = _farms[i];
+          arrFarms[i] = farm;
+      }
+
+      return arrFarms;
   }
 
   function withdrawFee() external onlyOwner {
